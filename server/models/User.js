@@ -43,6 +43,13 @@ userSchema.methods.comparePassword = async function (incomingPassword) {
   return await compare(incomingPassword, this.password);
 };
 
+userSchema.methods.toJSON = function () {
+  const user = this;
+  const userObject = user.toObject();
+  delete userObject.password;
+  return userObject;
+};
+
 const User = mongoose.model("User", userSchema);
 
 export default User;

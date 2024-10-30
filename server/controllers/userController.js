@@ -2,8 +2,10 @@ import User from "../models/User.js";
 
 const getUsers = async (req, res, next) => {
   try {
-    const users = await User.find().select("-password");
-    return res.status(200).json({ data: users });
+    const userData = req.user;
+    const users = await User.find({ _id: { $ne: userData.userId } });
+    const usersObj = users.map((item) => item.toJSON());
+    return res.status(200).json({ data: usersObj });
   } catch (error) {
     console.log(error);
     next(error);

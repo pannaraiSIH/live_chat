@@ -13,7 +13,7 @@ export default async function authMiddleware(req, res, next) {
     if (!user) {
       return res.status(401).json({ message: "Unauthenticated" });
     }
-
+    req.user = payload;
     next();
   } catch (error) {
     console.error("error:", error);

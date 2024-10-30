@@ -6,6 +6,7 @@ import dinosaur from "../assets/images/dinosaur.png";
 import dragonfly from "../assets/images/dragonfly.png";
 import ladybug from "../assets/images/ladybug.png";
 import { useNavigate } from "react-router-dom";
+import ProfileImageItem from "./ProfileImageItem";
 
 const imageList = [
   { name: "dinosaur", image: dinosaur },
@@ -42,9 +43,16 @@ const Login = () => {
     e.preventDefault();
 
     try {
-      isLogin
+      const res = isLogin
         ? await axiosInstance.post("/login", formData)
         : await axiosInstance.post("/register", formData);
+
+      const user = res.data.data;
+      localStorage.setItem("userId", user._id);
+      localStorage.setItem("username", user.username);
+      localStorage.setItem("profileImage", user.profileImage);
+      localStorage.setItem("role", user.role);
+
       Swal.fire({
         title: "Success",
         text: "Login successfully!!",
@@ -104,19 +112,15 @@ const Login = () => {
                   {imageList.map((item) => (
                     <div key={item.name}>
                       <label htmlFor={item.name} className="cursor-pointer ">
-                        <div
-                          className={`size-20 border rounded-full ${
+                        <ProfileImageItem
+                          image={item.image}
+                          alt={item.name}
+                          className={`${
                             formData.profileImage === item.name
                               ? "bg-orange-200"
                               : "bg-red-200"
-                          }`}
-                        >
-                          <img
-                            src={item.image}
-                            alt={item.name}
-                            className="hover:scale-105"
-                          />
-                        </div>
+                          } size-20`}
+                        />
                       </label>
                       <input
                         type="radio"

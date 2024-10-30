@@ -4,12 +4,13 @@ const register = async (req, res, next) => {
   try {
     const user = await User.create(req.body);
     const token = await user.generateAccessToken();
+    const userObj = user.toJSON();
     res.cookie("accessTokenCookie", token, {
       maxAge: process.env.COOKIE_MAXAGE,
       httpOnly: true,
       signed: true,
     });
-    return res.status(201).json({ message: "Success", accessToken: token });
+    return res.status(201).json({ message: "Success", data: userObj });
   } catch (error) {
     console.log("error:", error);
     // next();
@@ -31,13 +32,14 @@ const login = async (req, res, next) => {
       throw new Error("Username or password is invalid");
     }
 
+    const userObj = user.toJSON();
     const token = await user.generateAccessToken();
     res.cookie("accessTokenCookie", token, {
       maxAge: process.env.COOKIE_MAXAGE,
       httpOnly: true,
       signed: true,
     });
-    return res.status(200).json({ message: "Success", accessToken: token });
+    return res.status(200).json({ message: "Success", data: userObj });
   } catch (error) {
     console.log("error:", error);
     return res.status(401).json({ message: "Error" });

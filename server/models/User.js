@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { hash, genSalt, compare } from "bcrypt";
+import jwt from "jsonwebtoken";
 
 const userSchema = new mongoose.Schema(
   {
@@ -27,6 +28,16 @@ userSchema.pre("save", async function (next) {
   this.password = hashedPassword;
   next();
 });
+
+userSchema.methods.generateAccessToken = async function () {
+  return jwt.sign(
+    { userId: this._id, role: this.role },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: process.env.JWT_LIFETIME,
+    }
+  );
+};
 
 userSchema.methods.comparePassword = async function (incomingPassword) {
   return await compare(incomingPassword, this.password);

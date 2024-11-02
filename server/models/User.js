@@ -18,6 +18,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["bear", "dinosaur", "ladybug", "dragonfly"],
     },
+    onlineStatus: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true, versionKey: "__v" }
 );

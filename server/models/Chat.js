@@ -3,24 +3,40 @@ const id = mongoose.Schema.Types.ObjectId;
 
 const chatSchema = new mongoose.Schema(
   {
-    userId: {
-      type: id,
-      required: true,
-    },
     room: {
       type: String,
       enum: ["general", "art", "technology", "Line", "private"],
       default: "general",
     },
+    users: [
+      {
+        userId: {
+          type: id,
+          required: true,
+          ref: "User",
+        },
+      },
+    ],
     messages: [
       {
-        recipientId: {
+        senderId: {
           type: id,
           ref: "User",
         },
-        recipientName: String,
+        messageType: {
+          type: String,
+          enum: ["text", "file", "image"],
+          default: "text",
+        },
         message: String,
-        file: String,
+        file: {
+          type: String,
+          default: null,
+        },
+        image: {
+          type: String,
+          default: null,
+        },
         created_at: {
           type: Date,
           default: Date.now,
@@ -31,4 +47,5 @@ const chatSchema = new mongoose.Schema(
   { timestamps: true, versionKey: "__v" }
 );
 
-export default Chat = mongoose.model("Chat", chatSchema);
+const Chat = mongoose.model("Chat", chatSchema);
+export default Chat;

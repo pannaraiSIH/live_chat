@@ -8,82 +8,123 @@ export default function socket(server) {
   let onlineUsers = [];
 
   io.on("connection", async (socket) => {
-    console.log("connect to", socket.id);
-    const userId = socket.handshake.query.userId;
+    try {
+      const userId = socket.handshake.query.userId;
 
-    // check if user already online
-    const isUserOnline = onlineUsers.some(
-      (user) => user?._id?.toString() === userId
-    );
+      // check if user already online
+      const isUserOnline = onlineUsers?.some(
+        (user) => user?._id?.toString() === userId
+      );
 
-    if (!isUserOnline) {
-      // update user's online status
-      try {
-        const updateUser = await User.findByIdAndUpdate(
-          userId,
+      console.log(
+        "User connected to server:",
+        userId,
+        ", Online status:",
+        isUserOnline
+      );
+
+      if (!isUserOnline) {
+        // update user's online status
+        const updateUser = await User.findOneAndUpdate(
+          { _id: userId },
           { onlineStatus: true },
           { new: true }
         );
         onlineUsers.push({
           ...updateUser._doc,
           socketId: socket.id,
-          isMessageUnread: false,
         });
-      } catch (error) {
-        console.error(error);
       }
-    }
 
-    io.emit("online-users", onlineUsers);
+      socket.emit("receive-online-users", onlineUsers);
 
-    socket.on("send-message", async (data) => {
-      const { senderId, recipientId, room, message } = data;
-      const query =
-        room === "private"
-          ? {
-              room,
-              users: {
-                $all: [{ userId: senderId }, { userId: recipientId }],
-              },
-            }
-          : { room: room };
-      const chat = await Chat.findOne(query);
-      let newMessage = null;
-
-      if (chat) {
-        // update
-        newMessage = await Chat.findOneAndUpdate(
-          {
-            users: { $all: [{ userId: senderId, userId: recipientId }] },
-          },
-          { $push: { messages: { senderId, message } } },
-          { new: true }
-        );
-        console.log("updateChat", newMessage);
-      } else {
-        // create
-        newMessage = await Chat.create({
+      socket.on("send-message", async (data) => {
+        const {
+          senderId,
+          senderProfileImage,
+          senderUsername,
+          recipientId,
           room,
-          users: [{ userId: senderId }, { userId: recipientId }],
-          messages: [{ senderId, message }],
-        });
-        console.log("newChat", newMessage);
-      }
+          message,
+        } = data;
+        const query =
+          room === "private"
+            ? {
+                room,
+                users: {
+                  $all: [userId, recipientId],
+                },
+              }
+            : { room };
+        const chat = await Chat.findOne(query);
+        let newMessage = null;
 
-      const foundRecipient = onlineUsers.find(
-        (user) => user._id.toString() === recipientId
-      );
-      if (foundRecipient) {
-        io.to(foundRecipient.socketId).emit("receive-message", newMessage);
-      } else {
-        // do something
-      }
-    });
+        if (chat) {
+          // update existing chat
+          const query =
+            room === "private"
+              ? { users: { $all: [senderId, recipientId] } }
+              : { room };
 
-    socket.on("disconnect", async () => {
-      await User.findByIdAndUpdate(userId, { onlineStatus: false });
-      onlineUsers = onlineUsers.filter((user) => user.socketId !== socket.id);
-      io.emit("online-users", onlineUsers);
-    });
+          const updateData =
+            room === "private"
+              ? {
+                  $push: {
+                    messages: {
+                      senderId,
+                      senderUsername,
+                      senderProfileImage,
+                      message,
+                    },
+                  },
+                }
+              : {
+                  $push: {
+                    messages: {
+                      senderId,
+                      senderUsername,
+                      senderProfileImage,
+                      message,
+                    },
+                  },
+                  $addToSet: { users: senderId },
+                };
+
+          newMessage = await Chat.findOneAndUpdate(query, updateData, {
+            new: true,
+          });
+        } else {
+          // create a new chat
+          const createData = {
+            room,
+            users: room === "private" ? [senderId, recipientId] : [senderId],
+            messages: [
+              { senderId, senderUsername, senderProfileImage, message },
+            ],
+          };
+
+          newMessage = await Chat.create(createData);
+        }
+
+        const foundRecipient = onlineUsers.find(
+          (user) => user?._id?.toString() === recipientId
+        );
+        const foundSender = onlineUsers.find(
+          (user) => user?._id?.toString() === senderId
+        );
+        if (foundRecipient) {
+          io.to(foundRecipient.socketId).emit("receive-message", newMessage);
+        }
+        io.to(foundSender.socketId).emit("receive-message", newMessage);
+      });
+
+      socket.on("disconnect", async () => {
+        await User.findByIdAndUpdate(userId, { onlineStatus: false });
+        onlineUsers = onlineUsers.filter((user) => user.socketId !== socket.id);
+        io.emit("online-users", onlineUsers);
+      });
+    } catch (error) {
+      console.error("error", error);
+    }
   });
 }

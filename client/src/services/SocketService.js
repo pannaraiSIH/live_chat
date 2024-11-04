@@ -19,8 +19,12 @@ export default class SocketService {
     });
   }
 
-  onGetOnlineUsers(cb) {
-    return this.socket.on("online-users", cb);
+  onCheckOnlineUsers() {
+    return this.socket.emit("check-online-users");
+  }
+
+  onReceiveOnlineUsers(cb) {
+    return this.socket.on("receive-online-users", cb);
   }
 
   onSendMessage(data) {

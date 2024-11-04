@@ -8,21 +8,15 @@ const chatSchema = new mongoose.Schema(
       enum: ["general", "art", "technology", "Line", "private"],
       default: "general",
     },
-    users: [
-      {
-        userId: {
-          type: id,
-          required: true,
-          ref: "User",
-        },
-      },
-    ],
+    users: [String],
     messages: [
       {
         senderId: {
           type: id,
           ref: "User",
         },
+        senderUsername: String,
+        senderProfileImage: String,
         messageType: {
           type: String,
           enum: ["text", "file", "image"],

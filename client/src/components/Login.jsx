@@ -57,14 +57,16 @@ const Login = () => {
         title: "Success",
         text: "Login successfully!!",
         icon: "success",
-        // showConfirmButton: false,
-      });
-      navigate("/");
+        showConfirmButton: false,
+        timer: 3000,
+      }).then(() => navigate("/"));
     } catch (error) {
       Swal.fire({
         title: "Error",
         text: `Failed to ${isLogin ? "login" : "register"}, please try again`,
         icon: "error",
+        showConfirmButton: false,
+        timer: 3000,
       });
     }
   };

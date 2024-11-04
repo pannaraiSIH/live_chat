@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import SideBarContainer from "./SideBarContainer";
 import ItemList from "./ItemList";
 import ArtIcon from "./icons/ArtIcon";
@@ -12,6 +12,8 @@ import ProfileImageItem from "./ProfileImageItem";
 import LineIcon from "./icons/LineIcon";
 import MessageIcon from "./icons/MessageIcon";
 import SocketService from "../services/SocketService";
+import formatTime from "../utils/dateTime";
+import Swal from "sweetalert2";
 
 const chatRoomList = [
   {
@@ -51,9 +53,8 @@ const Home = () => {
   const userId = localStorage.getItem("userId");
   const username = localStorage.getItem("username");
   const profileImage = localStorage.getItem("profileImage");
-  const navigate = useNavigate();
-  const socketService = useMemo(() => new SocketService(userId), [userId]);
   const [unreadMessageList, setUnreadMessageList] = useState([]);
+  const navigate = useNavigate();
 
   const handleLogout = () => {
     navigate("/login");
@@ -63,17 +64,20 @@ const Home = () => {
   const handleSendMessage = (e) => {
     e.preventDefault();
 
+    const socketService = new SocketService(userId);
+
     if (selectedRoom === "private" && !selectedRecipient) return;
 
     const data = {
       senderId: userId,
-      recipientId: selectedRecipient._id,
-      recipientName: selectedRecipient.userName,
-      recipientProfileImage: selectedRecipient.profileImage,
+      senderProfileImage: profileImage,
+      senderUsername: username,
+      recipientId: selectedRoom === "private" ? selectedRecipient._id : null,
       message: chatMessage,
       room: selectedRoom,
     };
     socketService.onSendMessage(data);
+    setChatMessage("");
   };
 
   const handleGetOnlineStatus = (userId) => {
@@ -87,12 +91,14 @@ const Home = () => {
       return;
     }
 
+    const socketService = new SocketService(userId);
+
     const handleReceiveMessage = (data) => {
       if (data) {
         if (
           !selectedRoom ||
           (selectedRoom === "private" &&
-            data?.users?.every((user) => user?.userId !== selectedRecipient))
+            data?.users?.every((id) => id !== selectedRecipient))
         ) {
           setUnreadMessageList((prev) => [...prev, data]);
         } else {
@@ -101,21 +107,21 @@ const Home = () => {
       }
     };
 
-    const handleGetOnlineUsers = (users) => {
+    const handleReceiveOnlineUsers = (users) => {
       setOnlineUsers(users);
     };
 
-    socketService.onGetOnlineUsers(handleGetOnlineUsers);
+    socketService.onReceiveOnlineUsers(handleReceiveOnlineUsers);
     socketService.onReceiveMessage(handleReceiveMessage);
 
     return () => {
+      socketService.off("receive-online-users");
       socketService.off("receive-message", handleReceiveMessage);
-      socketService.off("online-users", handleGetOnlineUsers);
     };
-  }, [userId, socketService, navigate, selectedRecipient, selectedRoom]);
+  }, [userId, navigate, selectedRecipient, selectedRoom]);
 
   useEffect(() => {
-    const fetch = async () => {
+    const fetchUserList = async () => {
       try {
         const res = await axiosInstance.get("/users");
         let users = res.data.data.filter((user) => user._id !== userId);
@@ -125,29 +131,43 @@ const Home = () => {
         console.error(error);
       }
     };
-    fetch();
+    fetchUserList();
   }, [userId]);
 
   useEffect(() => {
-    // const fetchChatHistory = async () => {
-    //   try {
-    //     const res = await axiosInstance.get("/chat", {
-    //       params: {
-    //         userId,
-    //         recipientId: selectedRecipient,
-    //         room: selectedRoom,
-    //       },
-    //     });
-    //     console.log("his:", res);
-    //   } catch (error) {}
-    // };
-    // fetchChatHistory();
-
     if (!selectedRoom || (selectedRoom === "private" && !selectedRecipient)) {
       setMessageList({});
       return;
     }
 
+    const fetchChatHistory = async () => {
+      try {
+        Swal.fire({
+          title: "Please wait !",
+          allowOutsideClick: false,
+          showConfirmButton: false,
+          willOpen: () => {
+            Swal.showLoading();
+          },
+        });
+        const response = await axiosInstance.get("/chats", {
+          params: {
+            userId,
+            recipientId:
+              selectedRoom === "private" ? selectedRecipient._id : null,
+            room: selectedRoom,
+          },
+        });
+        Swal.close();
+        setMessageList(response.data.data || {});
+      } catch (error) {
+        Swal.close();
+        console.error("error", error);
+      }
+    };
+    fetchChatHistory();
+
+    // update unread status
     if (unreadMessageList.length > 0) {
       const usersToCheck = [userId, selectedRecipient?._id];
 
@@ -155,15 +175,26 @@ const Home = () => {
         (message) =>
           message.room === selectedRoom &&
           usersToCheck.every((id) =>
-            message?.users?.some((user) => user?.userId === id)
+            message?.users?.some((userId) => userId === id)
           )
       );
 
       console.log("foundChat", foundChat);
       if (foundChat) {
-        setMessageList(foundChat);
+        const updateUnreadMessageList = unreadMessageList.filter(
+          (unread) => unread?._id !== foundChat._id
+        );
+        const updateUserList = userList.map((user) => {
+          if (user._id === selectedRecipient?._id) {
+            return { ...user, hasUnreadMessage: false };
+          }
+          return user;
+        });
+        setUnreadMessageList(updateUnreadMessageList);
+        setUserList(updateUserList);
       }
     }
+    // eslint-disable-next-line
   }, [selectedRecipient, selectedRoom, userId, unreadMessageList]);
 
   useEffect(() => {
@@ -171,8 +202,7 @@ const Home = () => {
       const updateUserList = userList.map((user) => {
         const hasUnreadMessage = unreadMessageList.some(
           (unread) =>
-            unread.room === "private" &&
-            unread.users.some((us) => us.userId === user._id)
+            unread.room === "private" && unread.users.includes(user._id)
         );
         return hasUnreadMessage ? { ...user, hasUnreadMessage: true } : user;
       });
@@ -184,9 +214,8 @@ const Home = () => {
   }, [unreadMessageList, userList]);
 
   useEffect(() => {
-    console.log("UnreadMessageList updated:", unreadMessageList);
-    console.log("UserList updated:", userList);
-  }, [unreadMessageList, userList]);
+    console.log("OnlineUsers updated:", onlineUsers);
+  }, [onlineUsers]);
 
   return (
     <>
@@ -280,15 +309,44 @@ const Home = () => {
               <div className=" h-[76vh] overflow-y-auto">
                 <ul className="flex flex-col gap-4">
                   {messageList?.messages?.map((message, index) => (
-                    <li
-                      key={index}
-                      className={`bg-green-300 px-4 py-2 ${
-                        message?.senderId === userId
-                          ? "rounded-l-lg rounded-tr-lg"
-                          : "rounded-r-lg rounded-tl-lg"
-                      }`}
-                    >
-                      {message?.message}
+                    <li key={index}>
+                      <div
+                        className={`flex gap-1 items-end ${
+                          message?.senderId === userId && "flex-row-reverse"
+                        }`}
+                      >
+                        {message?.senderId !== userId && (
+                          <div>
+                            <p className="text-sm text-center">
+                              {message?.senderUsername}
+                            </p>
+                            {getProfileImage(message?.senderProfileImage) ? (
+                              <div className="size-12">
+                                <ProfileImageItem
+                                  image={getProfileImage(
+                                    message?.senderProfileImage
+                                  )}
+                                  className="bg-red-200"
+                                />
+                              </div>
+                            ) : (
+                              <UserIcon />
+                            )}
+                          </div>
+                        )}
+                        <p
+                          className={`px-4 py-2 max-w-sm flex-grow ${
+                            message?.senderId === userId
+                              ? "rounded-l-full rounded-tr-full bg-white "
+                              : "rounded-r-full rounded-tl-full bg-green-300"
+                          }`}
+                        >
+                          {message?.message}
+                        </p>
+                        <p className="text-[0.7rem] self-end">
+                          {formatTime(message?.created_at)}
+                        </p>
+                      </div>
                     </li>
                   ))}
                 </ul>

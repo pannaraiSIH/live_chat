@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Route,
   createBrowserRouter,
@@ -8,16 +8,27 @@ import {
 } from "react-router-dom";
 import Home from "./components/Home";
 import Login from "./components/Login";
-import SocketService from "./services/SocketService";
 import isAuthenticated from "./utils/isAuthenticated";
+import socket from "./socket";
 
 function App() {
-  const userId = localStorage.getItem("userId");
+  const [userId, setUserId] = useState(localStorage.getItem("userId"));
 
   useEffect(() => {
-    if (!userId) return;
-    const socketService = new SocketService(userId);
-    socketService.onConnection();
+    window.addEventListener("storage", () => {
+      const id = localStorage.getItem("userId");
+      setUserId(id);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (userId) {
+      socket.io.opts.query = { userId };
+      socket.connect();
+      socket.on("connect", () => {
+        console.log("Socket is connected!!");
+      });
+    }
   }, [userId]);
 
   const router = createBrowserRouter(

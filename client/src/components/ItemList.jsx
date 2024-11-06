@@ -1,3 +1,4 @@
+import PropTypes from "prop-types";
 import React from "react";
 
 const ItemList = ({ text, icon, unread, className, onClick }) => {
@@ -15,6 +16,14 @@ const ItemList = ({ text, icon, unread, className, onClick }) => {
       )}
     </li>
   );
+};
+
+ItemList.propTypes = {
+  text: PropTypes.string,
+  icon: PropTypes.element,
+  unread: PropTypes.bool,
+  className: PropTypes.string,
+  onClick: PropTypes.func,
 };
 
 export default ItemList;

@@ -11,9 +11,12 @@ import getProfileImage from "../utils/getProfileImage";
 import ProfileImageItem from "./ProfileImageItem";
 import LineIcon from "./icons/LineIcon";
 import MessageIcon from "./icons/MessageIcon";
-import SocketService from "../services/SocketService";
-import formatTime from "../utils/dateTime";
-import Swal from "sweetalert2";
+// import SocketService from "../services/SocketService";
+// import formatTime from "../utils/dateTime";
+// import Swal from "sweetalert2";
+import handleLocalStorage from "../utils/handleLocalStorage";
+import MessagePanel from "./MessagePanel";
+import socket from "../socket";
 
 const chatRoomList = [
   {
@@ -45,28 +48,31 @@ const chatRoomList = [
 
 const Home = () => {
   const [chatMessage, setChatMessage] = useState("");
+  const [messageList, setMessageList] = useState({});
   const [userList, setUserList] = useState([]);
+  const [onlineUsers, setOnlineUsers] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState("private");
   const [selectedRecipient, setSelectedRecipient] = useState(null);
-  const [messageList, setMessageList] = useState({});
-  const [onlineUsers, setOnlineUsers] = useState([]);
-  const userId = localStorage.getItem("userId");
-  const username = localStorage.getItem("username");
-  const profileImage = localStorage.getItem("profileImage");
-  const [unreadMessageList, setUnreadMessageList] = useState([]);
+  const [unreadMessageIdList, setUnreadMessageIdList] = useState([]); //id of sender
+  const { userId, username, profileImage } = handleLocalStorage("get", {
+    userId: "userId",
+    username: "username",
+    profileImage: "profileImage",
+    role: "role",
+  });
   const navigate = useNavigate();
 
   const handleLogout = () => {
     navigate("/login");
+    socket.disconnect();
     localStorage.clear();
   };
 
   const handleSendMessage = (e) => {
     e.preventDefault();
 
-    const socketService = new SocketService(userId);
-
-    if (selectedRoom === "private" && !selectedRecipient) return;
+    if ((selectedRoom === "private" && !selectedRecipient) || !chatMessage)
+      return;
 
     const data = {
       senderId: userId,
@@ -76,7 +82,7 @@ const Home = () => {
       message: chatMessage,
       room: selectedRoom,
     };
-    socketService.onSendMessage(data);
+    socket.emit("send-message", data);
     setChatMessage("");
   };
 
@@ -85,25 +91,24 @@ const Home = () => {
     return foundUser ? foundUser.onlineStatus : false;
   };
 
-  useEffect(() => {
-    if (!userId) {
-      navigate("/login");
-      return;
+  const handleSelectChatRoom = async (room, recipientData) => {
+    if (room !== "private") {
+      socket.emit("join-room", room);
     }
 
-    const socketService = new SocketService(userId);
+    setUnreadMessageIdList((prev) =>
+      prev.filter((id) =>
+        recipientData ? id !== recipientData?._id : id !== room
+      )
+    );
+    setSelectedRecipient(recipientData);
+    setSelectedRoom(room);
+  };
 
+  useEffect(() => {
     const handleReceiveMessage = (data) => {
       if (data) {
-        if (
-          !selectedRoom ||
-          (selectedRoom === "private" &&
-            data?.users?.every((id) => id !== selectedRecipient))
-        ) {
-          setUnreadMessageList((prev) => [...prev, data]);
-        } else {
-          setMessageList(data);
-        }
+        setMessageList(data);
       }
     };
 
@@ -111,27 +116,30 @@ const Home = () => {
       setOnlineUsers(users);
     };
 
-    socketService.onReceiveOnlineUsers(handleReceiveOnlineUsers);
-    socketService.onReceiveMessage(handleReceiveMessage);
+    const handleUnreadMessage = (senderId) => {
+      setUnreadMessageIdList((prev) => [...prev, senderId]);
+    };
+
+    socket.on("online-users", handleReceiveOnlineUsers);
+    socket.on("receive-message", handleReceiveMessage);
+    socket.on("unread-message", handleUnreadMessage);
 
     return () => {
-      socketService.off("receive-online-users");
-      socketService.off("receive-message", handleReceiveMessage);
+      socket.off("online-users", handleReceiveOnlineUsers);
+      socket.off("receive-message", handleReceiveMessage);
+      socket.off("unread-message", handleUnreadMessage);
     };
-  }, [userId, navigate, selectedRecipient, selectedRoom]);
+  }, [userId, navigate]);
 
   useEffect(() => {
-    const fetchUserList = async () => {
-      try {
-        const res = await axiosInstance.get("/users");
+    axiosInstance
+      .get("/users")
+      .then((res) => {
         let users = res.data.data.filter((user) => user._id !== userId);
         users = users.map((user) => ({ ...user, hasUnreadMessage: false }));
         setUserList(users);
-      } catch (error) {
-        console.error(error);
-      }
-    };
-    fetchUserList();
+      })
+      .catch((error) => console.error(error));
   }, [userId]);
 
   useEffect(() => {
@@ -140,89 +148,37 @@ const Home = () => {
       return;
     }
 
-    const fetchChatHistory = async () => {
-      try {
-        Swal.fire({
-          title: "Please wait !",
-          allowOutsideClick: false,
-          showConfirmButton: false,
-          willOpen: () => {
-            Swal.showLoading();
-          },
-        });
-        const response = await axiosInstance.get("/chats", {
-          params: {
-            userId,
-            recipientId:
-              selectedRoom === "private" ? selectedRecipient._id : null,
-            room: selectedRoom,
-          },
-        });
-        Swal.close();
-        setMessageList(response.data.data || {});
-      } catch (error) {
-        Swal.close();
-        console.error("error", error);
-      }
+    const controller = new AbortController();
+
+    axiosInstance
+      .get("/chats", {
+        params: {
+          userId,
+          recipientId:
+            selectedRoom === "private" ? selectedRecipient._id : null,
+          room: selectedRoom,
+        },
+        signal: controller.signal,
+      })
+      .then((res) => setMessageList(res.data.data || {}))
+      .catch((error) => console.error("error", error));
+
+    return () => {
+      controller.abort();
     };
-    fetchChatHistory();
-
-    // update unread status
-    if (unreadMessageList.length > 0) {
-      const usersToCheck = [userId, selectedRecipient?._id];
-
-      const foundChat = unreadMessageList?.find(
-        (message) =>
-          message.room === selectedRoom &&
-          usersToCheck.every((id) =>
-            message?.users?.some((userId) => userId === id)
-          )
-      );
-
-      console.log("foundChat", foundChat);
-      if (foundChat) {
-        const updateUnreadMessageList = unreadMessageList.filter(
-          (unread) => unread?._id !== foundChat._id
-        );
-        const updateUserList = userList.map((user) => {
-          if (user._id === selectedRecipient?._id) {
-            return { ...user, hasUnreadMessage: false };
-          }
-          return user;
-        });
-        setUnreadMessageList(updateUnreadMessageList);
-        setUserList(updateUserList);
-      }
-    }
-    // eslint-disable-next-line
-  }, [selectedRecipient, selectedRoom, userId, unreadMessageList]);
-
-  useEffect(() => {
-    if (unreadMessageList.length > 0) {
-      const updateUserList = userList.map((user) => {
-        const hasUnreadMessage = unreadMessageList.some(
-          (unread) =>
-            unread.room === "private" && unread.users.includes(user._id)
-        );
-        return hasUnreadMessage ? { ...user, hasUnreadMessage: true } : user;
-      });
-
-      if (JSON.stringify(updateUserList) !== JSON.stringify(userList)) {
-        setUserList(updateUserList);
-      }
-    }
-  }, [unreadMessageList, userList]);
+  }, [selectedRecipient, selectedRoom, userId]);
 
   useEffect(() => {
     console.log("OnlineUsers updated:", onlineUsers);
-  }, [onlineUsers]);
+    console.log("UnreadMessageIdList updated:", unreadMessageIdList);
+  }, [onlineUsers, unreadMessageIdList]);
 
   return (
     <>
       <div className="h-screen flex flex-col ">
         <header className="bg-blue shadow-lg ">
           <nav className="mx-4 py-4 flex items-center justify-between">
-            <div className="px-4 py-2 rounded-md bg-light-blue">
+            <div className="px-4 py-2 rounded-md bg-white text-blue font-bold">
               <button type="button" onClick={handleLogout}>
                 Logout
               </button>
@@ -249,22 +205,18 @@ const Home = () => {
         </header>
 
         <main className="flex h-full">
-          <div className="bg-blue max-w-60 w-full">
-            <SideBarContainer title="">
+          <div className="bg-blue/70 max-w-60 w-full">
+            <SideBarContainer>
               {chatRoomList.map((room, index) => (
                 <div key={room.name}>
                   <ItemList
                     text={room.name}
                     icon={room.icon}
                     className={`${
-                      selectedRoom === room.value && "bg-md-light-blue/50"
-                    } hover:bg-md-light-blue/50`}
-                    onClick={() => {
-                      if (room.value !== "private") {
-                        setSelectedRecipient(null);
-                      }
-                      setSelectedRoom(room.value);
-                    }}
+                      selectedRoom === room.value && "bg-blue/60"
+                    } hover:bg-blue/60`}
+                    onClick={() => handleSelectChatRoom(room.value, null)}
+                    unread={unreadMessageIdList.includes(room.value)}
                   />
                   {index === 0 && (
                     <p className="font-bold text-xl mt-2">Chat rooms</p>
@@ -275,15 +227,15 @@ const Home = () => {
           </div>
 
           {selectedRoom === "private" && (
-            <div className="bg-md-light-blue max-w-60 w-full">
+            <div className="bg-light-blue max-w-60 w-full">
               <SideBarContainer title="">
                 {userList.map((user) => (
                   <ItemList
                     key={user._id}
                     text={user.username}
                     className={`${
-                      selectedRecipient?._id === user._id && "bg-light-blue/30"
-                    } hover:bg-light-blue/30`}
+                      selectedRecipient?._id === user._id && "bg-blue/30"
+                    } hover:bg-blue/30`}
                     icon={
                       getProfileImage(user.profileImage) ? (
                         <ProfileImageItem
@@ -296,80 +248,21 @@ const Home = () => {
                         <UserIcon className="size-8" />
                       )
                     }
-                    onClick={() => setSelectedRecipient(user)}
-                    unread={user.hasUnreadMessage}
+                    onClick={() => handleSelectChatRoom("private", user)}
+                    unread={unreadMessageIdList.includes(user._id)}
                   />
                 ))}
               </SideBarContainer>
             </div>
           )}
 
-          <div className="bg-light-blue flex-grow">
-            <div className="mx-4 py-4 flex flex-col h-full gap-4">
-              <div className=" h-[76vh] overflow-y-auto">
-                <ul className="flex flex-col gap-4">
-                  {messageList?.messages?.map((message, index) => (
-                    <li key={index}>
-                      <div
-                        className={`flex gap-1 items-end ${
-                          message?.senderId === userId && "flex-row-reverse"
-                        }`}
-                      >
-                        {message?.senderId !== userId && (
-                          <div>
-                            <p className="text-sm text-center">
-                              {message?.senderUsername}
-                            </p>
-                            {getProfileImage(message?.senderProfileImage) ? (
-                              <div className="size-12">
-                                <ProfileImageItem
-                                  image={getProfileImage(
-                                    message?.senderProfileImage
-                                  )}
-                                  className="bg-red-200"
-                                />
-                              </div>
-                            ) : (
-                              <UserIcon />
-                            )}
-                          </div>
-                        )}
-                        <p
-                          className={`px-4 py-2 max-w-sm flex-grow ${
-                            message?.senderId === userId
-                              ? "rounded-l-full rounded-tr-full bg-white "
-                              : "rounded-r-full rounded-tl-full bg-green-300"
-                          }`}
-                        >
-                          {message?.message}
-                        </p>
-                        <p className="text-[0.7rem] self-end">
-                          {formatTime(message?.created_at)}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <form className=" flex gap-2" onSubmit={handleSendMessage}>
-                <label className="sr-only">Message</label>
-                <textarea
-                  id="message"
-                  name="message"
-                  placeholder="Enter message..."
-                  className="flex-grow rounded-lg px-4 py-2 resize-none "
-                  rows={1}
-                  onChange={(e) => setChatMessage(e.target.value)}
-                  value={chatMessage}
-                />
-                <button
-                  type="submit"
-                  className="bg-blue rounded-lg py-2 px-4 cursor-pointer"
-                >
-                  submit
-                </button>
-              </form>
-            </div>
+          <div className="bg-cream flex-grow">
+            <MessagePanel
+              messageList={messageList}
+              chatMessage={chatMessage}
+              setChatMessage={setChatMessage}
+              handleSendMessage={handleSendMessage}
+            />
           </div>
         </main>
       </div>

@@ -36,7 +36,12 @@ export default function socket(server) {
         });
       }
 
-      socket.emit("receive-online-users", onlineUsers);
+      socket.on("join-room", (room) => {
+        socket.join(room);
+        console.log("User join room:", room);
+      });
+
+      socket.emit("online-users", onlineUsers);
 
       socket.on("send-message", async (data) => {
         const {
@@ -47,6 +52,7 @@ export default function socket(server) {
           room,
           message,
         } = data;
+
         const query =
           room === "private"
             ? {
@@ -63,7 +69,7 @@ export default function socket(server) {
           // update existing chat
           const query =
             room === "private"
-              ? { users: { $all: [senderId, recipientId] } }
+              ? { users: { $all: [senderId, recipientId] }, room: "private" }
               : { room };
 
           const updateData =
@@ -106,15 +112,23 @@ export default function socket(server) {
           newMessage = await Chat.create(createData);
         }
 
-        const foundRecipient = onlineUsers.find(
-          (user) => user?._id?.toString() === recipientId
-        );
+        if (room !== "private") {
+          io.to(room).emit("receive-message", newMessage);
+          io.to(room).emit("unread-message", room);
+        } else {
+          const foundRecipient = onlineUsers.find(
+            (user) => user?._id?.toString() === recipientId
+          );
+
+          if (foundRecipient) {
+            io.to(foundRecipient.socketId).emit("receive-message", newMessage);
+            io.to(foundRecipient.socketId).emit("unread-message", senderId);
+          }
+        }
+
         const foundSender = onlineUsers.find(
           (user) => user?._id?.toString() === senderId
         );
-        if (foundRecipient) {
-          io.to(foundRecipient.socketId).emit("receive-message", newMessage);
-        }
         io.to(foundSender.socketId).emit("receive-message", newMessage);
       });
 

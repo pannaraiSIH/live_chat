@@ -1,4 +1,5 @@
 import React from "react";
+import PropTypes from "prop-types";
 
 const ProfileImageItem = ({ image, alt, className, status = null }) => {
   return (
@@ -13,6 +14,13 @@ const ProfileImageItem = ({ image, alt, className, status = null }) => {
       )}
     </div>
   );
+};
+
+ProfileImageItem.propTypes = {
+  image: PropTypes.string,
+  alt: PropTypes.string,
+  className: PropTypes.string,
+  status: PropTypes.bool || null,
 };
 
 export default ProfileImageItem;

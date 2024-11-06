@@ -7,6 +7,7 @@ import dragonfly from "../assets/images/dragonfly.png";
 import ladybug from "../assets/images/ladybug.png";
 import { useNavigate } from "react-router-dom";
 import ProfileImageItem from "./ProfileImageItem";
+import handleLocalStorage from "../utils/handleLocalStorage";
 
 const imageList = [
   { name: "dinosaur", image: dinosaur },
@@ -30,12 +31,10 @@ const Login = () => {
 
   const handleChangeInput = (e) => {
     const { name, value } = e.target;
-
     if (name === "profileImage" && formData.profileImage === value) {
       setFormData((prev) => ({ ...prev, profileImage: "" }));
       return;
     }
-
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
@@ -48,10 +47,12 @@ const Login = () => {
         : await axiosInstance.post("/register", formData);
 
       const user = res.data.data;
-      localStorage.setItem("userId", user._id);
-      localStorage.setItem("username", user.username);
-      localStorage.setItem("profileImage", user.profileImage);
-      localStorage.setItem("role", user.role);
+      handleLocalStorage("set", {
+        userId: user._id,
+        username: user.username,
+        profileImage: user.profileImage,
+        role: user.role,
+      });
 
       Swal.fire({
         title: "Success",
@@ -59,7 +60,10 @@ const Login = () => {
         icon: "success",
         showConfirmButton: false,
         timer: 3000,
-      }).then(() => navigate("/"));
+      }).then(() => {
+        navigate("/");
+        window.dispatchEvent(new Event("storage"));
+      });
     } catch (error) {
       Swal.fire({
         title: "Error",
@@ -141,7 +145,7 @@ const Login = () => {
             <div className="mx-auto">
               <button
                 type="submit"
-                className="text-center bg-blue px-4 py-2 rounded-md text-white"
+                className="text-center bg-blue px-4 py-2 rounded-md text-white font-bold"
               >
                 Submit
               </button>

@@ -39,11 +39,11 @@ const chatRoomList = [
     value: "technology",
     icon: <TechIcon className="size-8" />,
   },
-  {
-    name: "line",
-    value: "line",
-    icon: <LineIcon className="size-8" />,
-  },
+  // {
+  //   name: "line",
+  //   value: "line",
+  //   icon: <LineIcon className="size-8" />,
+  // },
 ];
 
 const Home = () => {

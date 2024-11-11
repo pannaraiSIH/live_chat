@@ -16,7 +16,8 @@ const userSchema = new mongoose.Schema(
     },
     profileImage: {
       type: String,
-      enum: ["bear", "dinosaur", "ladybug", "dragonfly"],
+      enum: ["bear", "dinosaur", "ladybug", "dragonfly", null, ""],
+      default: null,
     },
     onlineStatus: {
       type: Boolean,

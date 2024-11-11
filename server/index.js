@@ -1,3 +1,4 @@
+import "express-async-errors";
 import express from "express";
 import http from "http";
 import socket from "./socket/socket.js";

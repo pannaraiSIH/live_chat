@@ -67,7 +67,7 @@ const Login = () => {
     } catch (error) {
       Swal.fire({
         title: "Error",
-        text: `Failed to ${isLogin ? "login" : "register"}, please try again`,
+        text: error.response.data.message,
         icon: "error",
         showConfirmButton: false,
         timer: 3000,

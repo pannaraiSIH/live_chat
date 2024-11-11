@@ -41,7 +41,7 @@ export default function socket(server) {
         console.log("User join room:", room);
       });
 
-      socket.emit("online-users", onlineUsers);
+      io.emit("online-users", onlineUsers);
 
       socket.on("send-message", async (data) => {
         const {

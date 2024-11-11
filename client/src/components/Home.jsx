@@ -9,11 +9,7 @@ import { useNavigate } from "react-router-dom";
 import axiosInstance from "../config/axiosConfig";
 import getProfileImage from "../utils/getProfileImage";
 import ProfileImageItem from "./ProfileImageItem";
-import LineIcon from "./icons/LineIcon";
 import MessageIcon from "./icons/MessageIcon";
-// import SocketService from "../services/SocketService";
-// import formatTime from "../utils/dateTime";
-// import Swal from "sweetalert2";
 import handleLocalStorage from "../utils/handleLocalStorage";
 import MessagePanel from "./MessagePanel";
 import socket from "../socket";
@@ -106,6 +102,14 @@ const Home = () => {
   };
 
   useEffect(() => {
+    if (userId) {
+      socket.io.opts.query = { userId };
+    }
+
+    if (!socket.connected) {
+      socket.connect();
+    }
+
     const handleReceiveMessage = (data) => {
       if (data) {
         setMessageList(data);
@@ -113,6 +117,7 @@ const Home = () => {
     };
 
     const handleReceiveOnlineUsers = (users) => {
+      console.log("New online user", users);
       setOnlineUsers(users);
     };
 
@@ -167,11 +172,6 @@ const Home = () => {
       controller.abort();
     };
   }, [selectedRecipient, selectedRoom, userId]);
-
-  useEffect(() => {
-    console.log("OnlineUsers updated:", onlineUsers);
-    console.log("UnreadMessageIdList updated:", unreadMessageIdList);
-  }, [onlineUsers, unreadMessageIdList]);
 
   return (
     <>

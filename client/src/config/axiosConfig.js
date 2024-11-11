@@ -1,5 +1,5 @@
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import router from "../router";
 
 const axiosInstance = axios.create({
   baseURL: process.env.REACT_APP_API_URL,
@@ -14,8 +14,7 @@ axiosInstance.interceptors.response.use(
     }
 
     if (error.response && error.response.status === 401) {
-      const navigate = useNavigate();
-      navigate("/login");
+      router.navigate("/login");
       localStorage.clear();
     }
 

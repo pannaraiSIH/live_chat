@@ -1,49 +1,26 @@
-import React, { useEffect, useState } from "react";
-import {
-  Route,
-  createBrowserRouter,
-  createRoutesFromElements,
-  RouterProvider,
-  Navigate,
-} from "react-router-dom";
-import Home from "./components/Home";
-import Login from "./components/Login";
-import isAuthenticated from "./utils/isAuthenticated";
+import React, { useEffect } from "react";
+import { RouterProvider } from "react-router-dom";
 import socket from "./socket";
+import router from "./router";
 
 function App() {
-  const [userId, setUserId] = useState(localStorage.getItem("userId"));
-
   useEffect(() => {
-    window.addEventListener("storage", () => {
-      const id = localStorage.getItem("userId");
-      setUserId(id);
-    });
+    const handleConnect = () => {
+      console.log("Socket connected");
+    };
+
+    const handleDisconnect = () => {
+      console.log("Socket disconnected");
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+
+    return () => {
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+    };
   }, []);
-
-  useEffect(() => {
-    if (userId) {
-      socket.io.opts.query = { userId };
-      socket.connect();
-      socket.on("connect", () => {
-        console.log("Socket is connected!!");
-      });
-    }
-  }, [userId]);
-
-  const router = createBrowserRouter(
-    createRoutesFromElements(
-      <Route path="/">
-        <Route
-          index
-          element={<Home />}
-          loader={async () => await isAuthenticated()}
-        />
-        <Route path="/login" element={<Login />} />
-        <Route path="*" element={<Navigate to="/" />} />
-      </Route>
-    )
-  );
 
   return <RouterProvider router={router} />;
 }
